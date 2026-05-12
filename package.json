@@ -1,0 +1,14 @@
+{
+  "name": "neuroflow-monorepo",
+  "version": "1.0.0",
+  "description": "Neuroflow Full Stack Project",
+  "scripts": {
+    "install:all": "npm install --prefix Backend && npm install --prefix frontend",
+    "start:backend": "npm start --prefix Backend",
+    "start:frontend": "npm run dev --prefix frontend",
+    "dev": "npx concurrently \"npm run dev --prefix Backend\" \"npm run dev --prefix frontend\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
