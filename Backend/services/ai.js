@@ -28,10 +28,11 @@ Structure required:
 Rules:
 - Generate 5-8 summary points.
 - Generate exactly 5 highly accurate MCQ questions testing core concepts. "correct_option" must strictly be "a", "b", "c", or "d".
-- Generate exactly 10 flashcards for key terms/concepts.
+- For each question, provide an in-depth, easy-to-understand explanation for the correct answer based on the transcript details. Strictly avoid phrases like "As given in the transcript" or "According to the video."
+- Generate exactly 10 flashcards for key terms/concepts. Keep the back of each flashcard crisp, direct, and straightforward.
 - Ensure pure JSON, no markdown blocks.
 
-Transcript (truncated if too long):
+Transcript (truncated when too long):
 ${transcript.substring(0, 15000)}
 `;
 

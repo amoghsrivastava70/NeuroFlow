@@ -130,8 +130,8 @@ export default function Study() {
               </div>
             </div>
             <div className="flex gap-4 mt-8">
-              <button onClick={() => { setFIndex(Math.max(0, fIndex - 1)); setFlipped(false); }} disabled={fIndex === 0} className="p-3 rounded-full bg-gray-200 dark:bg-navy-700 disabled:opacity-50"><ArrowLeft /></button>
-              <button onClick={() => { setFIndex(Math.min(data.flashcards.length - 1, fIndex + 1)); setFlipped(false); }} disabled={fIndex === data.flashcards.length - 1} className="p-3 rounded-full bg-gray-200 dark:bg-navy-700 disabled:opacity-50"><ArrowRight /></button>
+              <button onClick={() => { setFIndex(Math.max(0, fIndex - 1)); setFlipped(false); }} disabled={fIndex === 0} className="p-3 rounded-full bg-gray-900 dark:bg-navy-700 disabled:opacity-50"><ArrowLeft color='white' /></button>
+              <button onClick={() => { setFIndex(Math.min(data.flashcards.length - 1, fIndex + 1)); setFlipped(false); }} disabled={fIndex === data.flashcards.length - 1} className="p-3 rounded-full bg-gray-900 dark:bg-navy-700 disabled:opacity-50"><ArrowRight color='white' /></button>
             </div>
           </div>
         )}

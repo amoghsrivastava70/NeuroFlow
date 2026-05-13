@@ -29,13 +29,15 @@ app.post('/api/process', async (req, res) => {
     if (existing.rows.length > 0) return res.json({ videoId });
 
     // Fetch Transcript
-    let transcriptData;
+    let transcriptResponse;
     try {
-      transcriptData = await fetchTranscript(videoId, { lang: 'en' });
-      console.log("The Transcription Data: ", transcriptData);
+      transcriptResponse = await fetchTranscript(videoId, { lang: 'en', videoDetails: true });
+      console.log("The Transcription Response: ", transcriptResponse);
     } catch (e) {
       return res.status(400).json({ error: 'Transcript not available for this video.' });
     }
+    const transcriptData = transcriptResponse.segments;
+    const videoDetails = transcriptResponse.videoDetails;
     const transcriptText = toPlainText(transcriptData, ' ');
     console.log("The Transcription Text: ", transcriptText);
 
@@ -47,7 +49,7 @@ app.post('/api/process', async (req, res) => {
 
     const vRes = await client.query(
       'INSERT INTO videos (youtube_id, title, channel, thumbnail_url) VALUES ($1, $2, $3, $4) RETURNING id',
-      [videoId, `Video ${videoId}`, 'YouTube Channel', `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`]
+      [videoId, videoDetails.title || `Video ${videoId}`, videoDetails.author || 'YouTube Channel', `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`]
     );
     const dbId = vRes.rows[0].id;
 
