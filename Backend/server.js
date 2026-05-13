@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const { YoutubeTranscript } = require('youtube-transcript');
+const { fetchTranscript, toPlainText } = require('youtube-transcript-plus');
 const { pool, initDb } = require('./db');
 const { generateStudyPack } = require('./services/ai');
 require('dotenv').config();
@@ -31,18 +31,20 @@ app.post('/api/process', async (req, res) => {
     // Fetch Transcript
     let transcriptData;
     try {
-      transcriptData = await YoutubeTranscript.fetchTranscript(videoId);
+      transcriptData = await fetchTranscript(videoId, { lang: 'en' });
+      console.log("The Transcription Data: ", transcriptData);
     } catch (e) {
       return res.status(400).json({ error: 'Transcript not available for this video.' });
     }
-    const transcriptText = transcriptData.map(t => t.text).join(' ');
+    const transcriptText = toPlainText(transcriptData, ' ');
+    console.log("The Transcription Text: ", transcriptText);
 
     // Call OpenAI
     const aiData = await generateStudyPack(transcriptText);
 
     // Save to DB via Transaction
     await client.query('BEGIN');
-    
+
     const vRes = await client.query(
       'INSERT INTO videos (youtube_id, title, channel, thumbnail_url) VALUES ($1, $2, $3, $4) RETURNING id',
       [videoId, `Video ${videoId}`, 'YouTube Channel', `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`]
@@ -103,10 +105,10 @@ app.get('/api/videos/:youtubeId', async (req, res) => {
 
     const sRes = await pool.query('SELECT bullet_points_json FROM summaries WHERE video_id = $1', [video.id]);
     const summary = JSON.parse(sRes.rows[0].bullet_points_json);
-    
+
     const qRes = await pool.query('SELECT * FROM questions WHERE video_id = $1', [video.id]);
     const questions = qRes.rows;
-    
+
     const fRes = await pool.query('SELECT * FROM flashcards WHERE video_id = $1', [video.id]);
     const flashcards = fRes.rows;
 
@@ -141,12 +143,12 @@ app.get('/api/dashboard', async (req, res) => {
   try {
     const countRes = await pool.query('SELECT COUNT(*) as count FROM videos');
     const totalVideos = parseInt(countRes.rows[0].count);
-    
+
     const scoreRes = await pool.query('SELECT AVG(CAST(quiz_score AS FLOAT) / NULLIF(total_questions, 0)) * 100 as avg_score FROM study_sessions WHERE total_questions > 0');
     const avgScore = scoreRes.rows[0].avg_score ? Math.round(scoreRes.rows[0].avg_score) : 0;
-    
+
     const sessionsRes = await pool.query('SELECT quiz_score, total_questions, ended_at FROM study_sessions ORDER BY ended_at ASC LIMIT 10');
-    
+
     res.json({
       totalVideos,
       avgScore,
