@@ -1,45 +1,48 @@
-import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
-import { useState, useEffect } from 'react';
-import { Moon, Sun, Brain } from 'lucide-react';
-import Home from './pages/Home';
-import Study from './pages/Study';
-import Dashboard from './pages/Dashboard';
-import Library from './pages/Library';
+import { useEffect, useState } from 'react';
+import { Routes, Route, useLocation } from 'react-router-dom';
+import { AnimatePresence } from 'framer-motion';
+import Navbar from './components/layout/Navbar';
+import HomePage from './pages/HomePage';
+import StudyPage from './pages/StudyPage';
+import DashboardPage from './pages/DashboardPage';
+import LibraryPage from './pages/LibraryPage';
+
+const STORAGE_KEY = 'neuroflow-theme';
+
+function getInitialTheme() {
+  if (typeof window === 'undefined') return 'dark';
+
+  const storedTheme = window.localStorage.getItem(STORAGE_KEY);
+  if (storedTheme === 'light' || storedTheme === 'dark') return storedTheme;
+
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
 
 export default function App() {
-  const [darkMode, setDarkMode] = useState(true);
+  const location = useLocation();
+  const [theme, setTheme] = useState(getInitialTheme);
 
   useEffect(() => {
-    if (darkMode) document.documentElement.classList.add('dark');
-    else document.documentElement.classList.remove('dark');
-  }, [darkMode]);
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    window.localStorage.setItem(STORAGE_KEY, theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((currentTheme) => (currentTheme === 'dark' ? 'light' : 'dark'));
+  };
 
   return (
-    <BrowserRouter>
-      <div className="min-h-screen">
-        <nav className="sticky top-0 z-50 bg-white/80 dark:bg-navy-900/80 backdrop-blur-md border-b border-gray-200 dark:border-navy-800">
-          <div className="container mx-auto px-6 py-4 flex justify-between items-center">
-            <Link to="/" className="flex items-center gap-2 text-xl font-bold text-slate-800 dark:text-white">
-              <Brain className="text-teal-500" /> NeuroFlow
-            </Link>
-            <div className="flex gap-6 items-center font-medium">
-              <Link to="/library" className="hover:text-teal-500 transition">Library</Link>
-              <Link to="/dashboard" className="hover:text-teal-500 transition">Dashboard</Link>
-              <button onClick={() => setDarkMode(!darkMode)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-navy-800">
-                {darkMode ? <Sun size={20} /> : <Moon size={20} />}
-              </button>
-            </div>
-          </div>
-        </nav>
-        <main className="container mx-auto px-6 py-10">
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/study/:youtubeId" element={<Study />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/library" element={<Library />} />
-          </Routes>
-        </main>
-      </div>
-    </BrowserRouter>
+    <div className="min-h-screen flex flex-col">
+      <Navbar theme={theme} onToggleTheme={toggleTheme} />
+      {/* Framer motion wrapper for page transitions */}
+      <AnimatePresence mode="wait">
+        <Routes key={location.pathname} location={location}>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/study/:youtubeId" element={<StudyPage />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/library" element={<LibraryPage />} />
+        </Routes>
+      </AnimatePresence>
+    </div>
   );
 }

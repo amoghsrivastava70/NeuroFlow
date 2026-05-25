@@ -39,6 +39,7 @@ app.post('/api/process', async (req, res) => {
     const transcriptData = transcriptResponse.segments;
     const videoDetails = transcriptResponse.videoDetails;
     const transcriptText = toPlainText(transcriptData, ' ');
+    const durationSeconds = Number(videoDetails?.lengthSeconds || videoDetails?.duration_seconds || 0);
     console.log("The Transcription Text: ", transcriptText);
 
     // Call OpenAI
@@ -48,8 +49,8 @@ app.post('/api/process', async (req, res) => {
     await client.query('BEGIN');
 
     const vRes = await client.query(
-      'INSERT INTO videos (youtube_id, title, channel, thumbnail_url) VALUES ($1, $2, $3, $4) RETURNING id',
-      [videoId, videoDetails.title || `Video ${videoId}`, videoDetails.author || 'YouTube Channel', `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`]
+      'INSERT INTO videos (youtube_id, title, channel, thumbnail_url, duration_seconds) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+      [videoId, videoDetails.title || `Video ${videoId}`, videoDetails.author || 'YouTube Channel', `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`, durationSeconds]
     );
     const dbId = vRes.rows[0].id;
 
@@ -149,7 +150,13 @@ app.get('/api/dashboard', async (req, res) => {
     const scoreRes = await pool.query('SELECT AVG(CAST(quiz_score AS FLOAT) / NULLIF(total_questions, 0)) * 100 as avg_score FROM study_sessions WHERE total_questions > 0');
     const avgScore = scoreRes.rows[0].avg_score ? Math.round(scoreRes.rows[0].avg_score) : 0;
 
-    const sessionsRes = await pool.query('SELECT quiz_score, total_questions, ended_at FROM study_sessions ORDER BY ended_at ASC LIMIT 10');
+    const sessionsRes = await pool.query(`
+      SELECT s.id, s.video_id, s.quiz_score, s.total_questions, s.time_spent_seconds, s.ended_at, v.title
+      FROM study_sessions s
+      JOIN videos v ON v.id = s.video_id
+      ORDER BY s.ended_at ASC
+      LIMIT 10
+    `);
 
     res.json({
       totalVideos,
