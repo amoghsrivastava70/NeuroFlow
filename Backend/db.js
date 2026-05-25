@@ -14,9 +14,18 @@ const initDb = async () => {
     await client.query('BEGIN');
     
     await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        full_name TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
       CREATE TABLE IF NOT EXISTS videos (
         id SERIAL PRIMARY KEY,
         youtube_id TEXT UNIQUE,
+        user_id INTEGER REFERENCES users(id),
         title TEXT,
         channel TEXT,
         thumbnail_url TEXT,
@@ -27,6 +36,7 @@ const initDb = async () => {
       CREATE TABLE IF NOT EXISTS study_sessions (
         id SERIAL PRIMARY KEY,
         video_id INTEGER REFERENCES videos(id),
+        user_id INTEGER REFERENCES users(id),
         started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         ended_at TIMESTAMP,
         time_spent_seconds INTEGER,
@@ -58,6 +68,17 @@ const initDb = async () => {
         video_id INTEGER REFERENCES videos(id),
         bullet_points_json TEXT
       );
+    `);
+
+    await client.query(`
+      ALTER TABLE videos ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id);
+      ALTER TABLE study_sessions ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id);
+      ALTER TABLE videos DROP CONSTRAINT IF EXISTS videos_youtube_id_key;
+    `);
+
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS videos_user_id_youtube_id_key
+      ON videos (user_id, youtube_id);
     `);
     
     await client.query('COMMIT');

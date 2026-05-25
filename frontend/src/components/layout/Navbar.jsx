@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
-import { BrainCircuit, Moon, Sun } from 'lucide-react';
+import { BrainCircuit, LogOut, Moon, Sun } from 'lucide-react';
 
-export default function Navbar({ theme, onToggleTheme }) {
+export default function Navbar({ theme, onToggleTheme, user, onLogout }) {
   const location = useLocation();
   const navLinks = [
     { name: 'Home', path: '/' },
@@ -16,7 +16,11 @@ export default function Navbar({ theme, onToggleTheme }) {
           <BrainCircuit className="text-accent-indigo group-hover:text-accent-teal transition-colors" size={32} />
           <span className="font-display font-bold text-2xl tracking-tight">NeuroFlow</span>
         </Link>
-        <div className="flex gap-8 items-center">
+        <div className="flex gap-4 items-center">
+          <div className="hidden md:flex flex-col items-end mr-2">
+            <span className="text-sm font-semibold text-text-primary">{user?.fullName}</span>
+            <span className="text-xs uppercase tracking-[0.2em] text-text-faint">{user?.username}</span>
+          </div>
           {navLinks.map(link => (
             <Link 
               key={link.name} 
@@ -34,6 +38,14 @@ export default function Navbar({ theme, onToggleTheme }) {
           >
             {theme === 'dark' ? <Sun size={16} className="text-accent-amber" /> : <Moon size={16} className="text-accent-indigo" />}
             <span className="hidden sm:inline">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
+          </button>
+          <button
+            type="button"
+            onClick={onLogout}
+            className="theme-surface inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium text-text-muted transition hover:border-accent-rose/30 hover:text-text-primary"
+          >
+            <LogOut size={16} className="text-accent-rose" />
+            <span className="hidden sm:inline">Logout</span>
           </button>
         </div>
       </div>

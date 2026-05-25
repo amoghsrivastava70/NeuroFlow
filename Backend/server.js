@@ -14,18 +14,120 @@ const extractVideoId = (url) => {
   return match ? match[1] : null;
 };
 
+const sanitizeUser = (userRow) => ({
+  id: userRow.id,
+  username: userRow.username,
+  fullName: userRow.full_name,
+});
+
+const normalizeUsername = (value) => value.trim().toLowerCase();
+
+const getAuthenticatedUser = async (req) => {
+  const rawUserId = req.header('x-user-id');
+  const userId = Number(rawUserId);
+
+  if (!userId) {
+    return null;
+  }
+
+  const result = await pool.query(
+    'SELECT id, username, full_name FROM users WHERE id = $1',
+    [userId]
+  );
+
+  return result.rows[0] || null;
+};
+
 // --- ENDPOINTS ---
 
-// 1. Process Video
+// 1. Signup
+app.post('/api/auth/signup', async (req, res) => {
+  try {
+    const { fullName, username, password } = req.body;
+
+    if (!fullName || !username || !password) {
+      return res.status(400).json({ error: 'Full name, username, and password are required.' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters long.' });
+    }
+
+    const cleanFullName = fullName.trim();
+    const cleanUsername = normalizeUsername(username);
+
+    const existingUserRes = await pool.query(
+      'SELECT id FROM users WHERE LOWER(username) = $1 LIMIT 1',
+      [cleanUsername]
+    );
+
+    if (existingUserRes.rows.length > 0) {
+      return res.status(409).json({ error: 'That username is already taken.' });
+    }
+
+    const result = await pool.query(
+      `
+        INSERT INTO users (username, password, full_name)
+        VALUES ($1, $2, $3)
+        RETURNING id, username, full_name
+      `,
+      [cleanUsername, password, cleanFullName]
+    );
+
+    res.status(201).json({ user: sanitizeUser(result.rows[0]) });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Unable to create your account right now.' });
+  }
+});
+
+// 2. Login
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password are required.' });
+    }
+
+    const result = await pool.query(
+      `
+        SELECT id, username, password, full_name
+        FROM users
+        WHERE LOWER(username) = LOWER($1)
+        LIMIT 1
+      `,
+      [normalizeUsername(username)]
+    );
+
+    const user = result.rows[0];
+    if (!user || user.password !== password) {
+      return res.status(401).json({ error: 'Invalid username or password.' });
+    }
+
+    res.json({ user: sanitizeUser(user) });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Unable to log in right now.' });
+  }
+});
+
+// 2. Process Video
 app.post('/api/process', async (req, res) => {
   const client = await pool.connect();
   try {
+    const user = await getAuthenticatedUser(req);
+    if (!user) return res.status(401).json({ error: 'Please log in to continue.' });
+
     const { url } = req.body;
     const videoId = extractVideoId(url);
     if (!videoId) return res.status(400).json({ error: 'Invalid YouTube URL' });
 
     // Check if already processed
-    const existing = await client.query('SELECT id FROM videos WHERE youtube_id = $1', [videoId]);
+    const existing = await client.query(
+      'SELECT id, youtube_id FROM videos WHERE youtube_id = $1 AND user_id = $2',
+      [videoId, user.id]
+    );
     if (existing.rows.length > 0) return res.json({ videoId });
 
     // Fetch Transcript
@@ -49,8 +151,8 @@ app.post('/api/process', async (req, res) => {
     await client.query('BEGIN');
 
     const vRes = await client.query(
-      'INSERT INTO videos (youtube_id, title, channel, thumbnail_url, duration_seconds) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-      [videoId, videoDetails.title || `Video ${videoId}`, videoDetails.author || 'YouTube Channel', `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`, durationSeconds]
+      'INSERT INTO videos (youtube_id, user_id, title, channel, thumbnail_url, duration_seconds) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+      [videoId, user.id, videoDetails.title || `Video ${videoId}`, videoDetails.author || 'YouTube Channel', `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`, durationSeconds]
     );
     const dbId = vRes.rows[0].id;
 
@@ -84,14 +186,19 @@ app.post('/api/process', async (req, res) => {
   }
 });
 
-// 2. Get All Videos (Library)
+// 3. Get All Videos (Library)
 app.get('/api/videos', async (req, res) => {
   try {
+    const user = await getAuthenticatedUser(req);
+    if (!user) return res.status(401).json({ error: 'Please log in to continue.' });
+
     const result = await pool.query(`
       SELECT v.*, 
       (SELECT quiz_score FROM study_sessions WHERE video_id = v.id ORDER BY ended_at DESC LIMIT 1) as last_score 
-      FROM videos v ORDER BY processed_at DESC
-    `);
+      FROM videos v
+      WHERE v.user_id = $1
+      ORDER BY processed_at DESC
+    `, [user.id]);
     res.json(result.rows);
   } catch (error) {
     console.error(error);
@@ -99,10 +206,16 @@ app.get('/api/videos', async (req, res) => {
   }
 });
 
-// 3. Get Single Study Pack
+// 4. Get Single Study Pack
 app.get('/api/videos/:youtubeId', async (req, res) => {
   try {
-    const vRes = await pool.query('SELECT * FROM videos WHERE youtube_id = $1', [req.params.youtubeId]);
+    const user = await getAuthenticatedUser(req);
+    if (!user) return res.status(401).json({ error: 'Please log in to continue.' });
+
+    const vRes = await pool.query(
+      'SELECT * FROM videos WHERE youtube_id = $1 AND user_id = $2',
+      [req.params.youtubeId, user.id]
+    );
     if (vRes.rows.length === 0) return res.status(404).json({ error: 'Video not found' });
     const video = vRes.rows[0];
 
@@ -122,17 +235,23 @@ app.get('/api/videos/:youtubeId', async (req, res) => {
   }
 });
 
-// 4. Save Session
+// 5. Save Session
 app.post('/api/sessions', async (req, res) => {
   try {
+    const user = await getAuthenticatedUser(req);
+    if (!user) return res.status(401).json({ error: 'Please log in to continue.' });
+
     const { youtubeId, time_spent_seconds, quiz_score, total_questions } = req.body;
-    const vRes = await pool.query('SELECT id FROM videos WHERE youtube_id = $1', [youtubeId]);
+    const vRes = await pool.query(
+      'SELECT id FROM videos WHERE youtube_id = $1 AND user_id = $2',
+      [youtubeId, user.id]
+    );
     if (vRes.rows.length === 0) return res.status(404).send();
     const videoId = vRes.rows[0].id;
 
     await pool.query(
-      'INSERT INTO study_sessions (video_id, time_spent_seconds, quiz_score, total_questions, ended_at) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)',
-      [videoId, time_spent_seconds, quiz_score, total_questions]
+      'INSERT INTO study_sessions (video_id, user_id, time_spent_seconds, quiz_score, total_questions, ended_at) VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)',
+      [videoId, user.id, time_spent_seconds, quiz_score, total_questions]
     );
     res.json({ success: true });
   } catch (error) {
@@ -141,24 +260,36 @@ app.post('/api/sessions', async (req, res) => {
   }
 });
 
-// 5. Dashboard Stats
+// 6. Dashboard Stats
 app.get('/api/dashboard', async (req, res) => {
   try {
-    const countRes = await pool.query('SELECT COUNT(*) as count FROM videos');
+    const user = await getAuthenticatedUser(req);
+    if (!user) return res.status(401).json({ error: 'Please log in to continue.' });
+
+    const countRes = await pool.query('SELECT COUNT(*) as count FROM videos WHERE user_id = $1', [user.id]);
     const totalVideos = parseInt(countRes.rows[0].count);
 
-    const scoreRes = await pool.query('SELECT AVG(CAST(quiz_score AS FLOAT) / NULLIF(total_questions, 0)) * 100 as avg_score FROM study_sessions WHERE total_questions > 0');
+    const scoreRes = await pool.query(
+      `
+        SELECT AVG(CAST(quiz_score AS FLOAT) / NULLIF(total_questions, 0)) * 100 as avg_score
+        FROM study_sessions
+        WHERE total_questions > 0 AND user_id = $1
+      `,
+      [user.id]
+    );
     const avgScore = scoreRes.rows[0].avg_score ? Math.round(scoreRes.rows[0].avg_score) : 0;
 
     const sessionsRes = await pool.query(`
       SELECT s.id, s.video_id, s.quiz_score, s.total_questions, s.time_spent_seconds, s.ended_at, v.title
       FROM study_sessions s
       JOIN videos v ON v.id = s.video_id
+      WHERE s.user_id = $1
       ORDER BY s.ended_at ASC
       LIMIT 10
-    `);
+    `, [user.id]);
 
     res.json({
+      user: sanitizeUser(user),
       totalVideos,
       avgScore,
       timeSaved: totalVideos * 25,

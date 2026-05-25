@@ -62,7 +62,7 @@ export default function StudyPage() {
       {/* Content */}
       <div className="min-h-[400px]">
         {activeTab === 'summary' && <SummaryTab summary={data.summary} onStartQuiz={() => setActiveTab('quiz')} />}
-        {activeTab === 'quiz' && <QuizTab questions={data.questions} videoId={data.video.id} />}
+        {activeTab === 'quiz' && <QuizTab questions={data.questions} videoId={data.video.youtube_id} />}
         {activeTab === 'flashcards' && <FlashcardsTab cards={data.flashcards} />}
       </div>
     </motion.div>
